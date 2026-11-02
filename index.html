@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Technical Event Check-in Tracker</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { max-width: 960px; margin: 2rem auto; padding: 0 1rem; background: #f9fafb; color: #111827; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    p.sub { color: #6b7280; margin-top: 0; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .card { background: #fff; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 6px; }
+    .card-label { font-size: 0.8rem; color: #6b7280; text-transform: uppercase; }
+    .card-val { font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; }
+    .controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    input, select, button { padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+    input[type="text"], input[type="email"] { flex: 1; min-width: 160px; }
+    button { background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 500; }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+    button.secondary:hover { background: #f3f4f6; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+    th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; }
+    th { background: #f3f4f6; font-weight: 600; color: #374151; }
+    tr.checked-in { background: #ecfdf5; }
+    .badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: #e5e7eb; }
+  </style>
+</head>
+<body>
+
+  <h1>Technical Event Check-in Tracker</h1>
+  <p class="sub">Simple registration management and live check-in tool.</p>
+
+  <div class="stats">
+    <div class="card"><div class="card-label">Total Registered</div><div class="card-val" id="totalReg">0</div></div>
+    <div class="card"><div class="card-label">Checked In</div><div class="card-val" id="totalIn">0</div></div>
+    <div class="card"><div class="card-label">Attendance Rate</div><div class="card-val" id="attRate">0%</div></div>
+    <div class="card"><div class="card-label">Drop-off Rate</div><div class="card-val" id="dropRate">0%</div></div>
+  </div>
+
+  <!-- Add Participant Form -->
+  <div class="controls">
+    <input type="text" id="newName" placeholder="Full Name">
+    <input type="email" id="newEmail" placeholder="Email Address">
+    <select id="newRole">
+      <option value="Student">Student</option>
+      <option value="Speaker">Speaker</option>
+      <option value="VIP">VIP</option>
+      <option value="General">General</option>
+    </select>
+    <button onclick="addParticipant()">+ Add Registrant</button>
+  </div>
+
+  <!-- Search & Export Controls -->
+  <div class="controls">
+    <input type="text" id="searchInput" placeholder="Search by ID, name, or email..." oninput="render()">
+    <select id="filterStatus" onchange="render()">
+      <option value="all">All Statuses</option>
+      <option value="in">Checked In</option>
+      <option value="out">Pending Check-in</option>
+    </select>
+    <button class="secondary" onclick="exportCSV()">Export CSV</button>
+    <button class="secondary" onclick="resetData()">Reset Sample Data</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Category</th>
+        <th>Checked In</th>
+        <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <script>
+    const defaultData = [
+      { id: 'PID-101', name: 'Aarav Sharma', email: 'aarav@example.com', role: 'Student', checkedIn: true, time: '09:15:22 AM' },
+      { id: 'PID-102', name: 'Diya Patel', email: 'diya@example.com', role: 'VIP', checkedIn: true, time: '09:30:10 AM' },
+      { id: 'PID-103', name: 'Rohan Nair', email: 'rohan@example.com', role: 'General', checkedIn: false, time: '-' },
+      { id: 'PID-104', name: 'Sneha Iyer', email: 'sneha@example.com', role: 'Speaker', checkedIn: true, time: '08:50:05 AM' },
+      { id: 'PID-105', name: 'Vikram Singh', email: 'vikram@example.com', role: 'Student', checkedIn: false, time: '-' },
+      { id: 'PID-106', name: 'Ananya Rao', email: 'ananya@example.com', role: 'Student', checkedIn: false, time: '-' }
+    ];
+
+    let participants = JSON.parse(localStorage.getItem('event_participants')) || defaultData;
+
+    function save() {
+      localStorage.setItem('event_participants', JSON.stringify(participants));
+      render();
+    }
+
+    function toggleCheckIn(index) {
+      participants[index].checkedIn = !participants[index].checkedIn;
+      participants[index].time = participants[index].checkedIn ? new Date().toLocaleTimeString() : '-';
+      save();
+    }
+
+    function addParticipant() {
+      const name = document.getElementById('newName').value.trim();
+      const email = document.getElementById('newEmail').value.trim();
+      const role = document.getElementById('newRole').value;
+      if (!name || !email) return alert('Please enter both name and email.');
+
+      const nextId = 'PID-' + (101 + participants.length);
+      participants.push({ id: nextId, name, email, role, checkedIn: false, time: '-' });
+      document.getElementById('newName').value = '';
+      document.getElementById('newEmail').value = '';
+      save();
+    }
+
+    function resetData() {
+      localStorage.removeItem('event_participants');
+      participants = JSON.parse(JSON.stringify(defaultData));
+      render();
+    }
+
+    function exportCSV() {
+      const headers = ['ID,Name,Email,Category,CheckedIn,Timestamp'];
+      const rows = participants.map(p => `${p.id},"${p.name}",${p.email},${p.role},${p.checkedIn},${p.time}`);
+      const blob = new Blob([headers.concat(rows).join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'event_checkins.csv';
+      a.click();
+    }
+
+    function render() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      const status = document.getElementById('filterStatus').value;
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+
+      participants.forEach((p, idx) => {
+        const matchesQuery = p.name.toLowerCase().includes(query) || p.email.toLowerCase().includes(query) || p.id.toLowerCase().includes(query);
+        const matchesStatus = status === 'all' || (status === 'in' && p.checkedIn) || (status === 'out' && !p.checkedIn);
+
+        if (matchesQuery && matchesStatus) {
+          const tr = document.createElement('tr');
+          if (p.checkedIn) tr.className = 'checked-in';
+          tr.innerHTML = `
+            <td><strong>${p.id}</strong></td>
+            <td>${p.name}</td>
+            <td>${p.email}</td>
+            <td><span class="badge">${p.role}</span></td>
+            <td><input type="checkbox" ${p.checkedIn ? 'checked' : ''} onchange="toggleCheckIn(${idx})"></td>
+            <td>${p.time}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      });
+
+      const total = participants.length;
+      const checked = participants.filter(p => p.checkedIn).length;
+      const att = total ? Math.round((checked / total) * 100) : 0;
+      const drop = total ? (100 - att) : 0;
+
+      document.getElementById('totalReg').textContent = total;
+      document.getElementById('totalIn').textContent = checked;
+      document.getElementById('attRate').textContent = att + '%';
+      document.getElementById('dropRate').textContent = drop + '%';
+    }
+
+    render();
+  </script>
+</body>
+</html>
